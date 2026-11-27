@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Annotated
 
 import jwt
@@ -11,6 +11,7 @@ from sqlmodel import Session
 from app.core import security
 from app.core.config import settings
 from app.core.db import engine
+from app.core.permissions import resolve_permissions
 from app.models import TokenPayload, User
 
 reusable_oauth2 = OAuth2PasswordBearer(
@@ -49,8 +50,32 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-def get_current_active_superuser(current_user: CurrentUser) -> User:
-    if not current_user.is_superuser:
+def get_current_permissions(session: SessionDep, current_user: CurrentUser) -> set[str]:
+    """The effective permission names of the current user (cached)."""
+    return resolve_permissions(session, current_user)
+
+
+CurrentPermissions = Annotated[set[str], Depends(get_current_permissions)]
+
+
+def require_permission(permission: str) -> Callable[..., User]:
+    """Dependency factory: 403 unless the user holds ``permission`` or ``super``."""
+
+    def dependency(current_user: CurrentUser, perms: CurrentPermissions) -> User:
+        if "super" in perms or permission in perms:
+            return current_user
+        raise HTTPException(
+            status_code=403, detail="The user doesn't have enough privileges"
+        )
+
+    return dependency
+
+
+def get_current_active_superuser(
+    current_user: CurrentUser, perms: CurrentPermissions
+) -> User:
+    # Kept for back-compat: equivalent to require_permission("super").
+    if "super" not in perms:
         raise HTTPException(
             status_code=403, detail="The user doesn't have enough privileges"
         )

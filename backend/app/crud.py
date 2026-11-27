@@ -3,17 +3,67 @@ from typing import Any
 
 from sqlmodel import Session, select
 
+from app.core.permissions import invalidate_user
 from app.core.security import get_password_hash, verify_password
-from app.models import Item, ItemCreate, User, UserCreate, UserUpdate
+from app.models import (
+    Item,
+    ItemCreate,
+    Role,
+    User,
+    UserCreate,
+    UserUpdate,
+)
+
+
+def get_role_by_name(*, session: Session, name: str) -> Role | None:
+    return session.exec(select(Role).where(Role.name == name)).first()
+
+
+def _roles_from_ids(*, session: Session, role_ids: list[uuid.UUID]) -> list[Role]:
+    roles: list[Role] = []
+    for role_id in role_ids:
+        role = session.get(Role, role_id)
+        if role is not None and role not in roles:
+            roles.append(role)
+    return roles
+
+
+def _resolve_create_roles(
+    *, session: Session, is_superuser: bool, role_ids: list[uuid.UUID] | None
+) -> list[Role]:
+    """Decide which roles a newly created user receives.
+
+    Precedence: explicit role_ids, plus the admin role when is_superuser is set.
+    Falls back to the baseline ``member`` role so every user has at least the
+    self-service level (mirrors the migration's is_superuser=False -> member).
+    """
+    roles: list[Role] = []
+    if role_ids:
+        roles = _roles_from_ids(session=session, role_ids=role_ids)
+    if is_superuser:
+        admin = get_role_by_name(session=session, name="admin")
+        if admin is not None and admin not in roles:
+            roles.append(admin)
+    if not roles:
+        member = get_role_by_name(session=session, name="member")
+        if member is not None:
+            roles = [member]
+    return roles
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
     db_obj = User.model_validate(
         user_create, update={"hashed_password": get_password_hash(user_create.password)}
     )
+    db_obj.roles = _resolve_create_roles(
+        session=session,
+        is_superuser=user_create.is_superuser,
+        role_ids=user_create.role_ids,
+    )
     session.add(db_obj)
     session.commit()
     session.refresh(db_obj)
+    invalidate_user(db_obj.id)
     return db_obj
 
 
@@ -24,10 +74,33 @@ def update_user(*, session: Session, db_user: User, user_in: UserUpdate) -> Any:
         password = user_data["password"]
         hashed_password = get_password_hash(password)
         extra_data["hashed_password"] = hashed_password
+
+    # Role-related fields are not columns on User; apply them separately so
+    # sqlmodel_update never tries to set the computed is_superuser property.
+    role_ids = user_data.pop("role_ids", None)
+    is_superuser = user_data.pop("is_superuser", None)
+
     db_user.sqlmodel_update(user_data, update=extra_data)
+
+    if role_ids is not None:
+        db_user.roles = _roles_from_ids(session=session, role_ids=role_ids)
+    if is_superuser is not None:
+        admin = get_role_by_name(session=session, name="admin")
+        if is_superuser:
+            if admin is not None and admin not in db_user.roles:
+                db_user.roles.append(admin)
+        else:
+            # Drop any super-bearing role(s).
+            db_user.roles = [
+                role
+                for role in db_user.roles
+                if "super" not in {p.name for p in role.permissions}
+            ]
+
     session.add(db_user)
     session.commit()
     session.refresh(db_user)
+    invalidate_user(db_user.id)
     return db_user
 
 
