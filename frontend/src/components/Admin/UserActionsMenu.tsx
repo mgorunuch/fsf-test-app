@@ -9,6 +9,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import useAuth from "@/hooks/useAuth"
+import usePermissions from "@/hooks/usePermissions"
+import { PERMISSIONS } from "@/lib/permissions"
 import DeleteUser from "./DeleteUser"
 import EditUser from "./EditUser"
 
@@ -19,6 +21,13 @@ interface UserActionsMenuProps {
 export const UserActionsMenu = ({ user }: UserActionsMenuProps) => {
   const [open, setOpen] = useState(false)
   const { user: currentUser } = useAuth()
+  const { hasPermission } = usePermissions()
+
+  // Only users:manage holders (admins) get edit/delete controls; managers
+  // and others see the table read-only.
+  if (!hasPermission(PERMISSIONS.usersManage)) {
+    return null
+  }
 
   if (user.id === currentUser?.id) {
     return null
