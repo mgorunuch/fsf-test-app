@@ -1,11 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
-import { type UserCreate, UsersService } from "@/client"
+import { RolesService, type UserCreate, UsersService } from "@/client"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -28,7 +28,16 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import useCustomToast from "@/hooks/useCustomToast"
+import usePermissions from "@/hooks/usePermissions"
+import { PERMISSIONS } from "@/lib/permissions"
 import { handleError } from "@/utils"
 
 const formSchema = z
@@ -42,7 +51,7 @@ const formSchema = z
     confirm_password: z
       .string()
       .min(1, { message: "Please confirm your password" }),
-    is_superuser: z.boolean(),
+    role_id: z.string().optional(),
     is_active: z.boolean(),
   })
   .refine((data) => data.password === data.confirm_password, {
@@ -56,6 +65,14 @@ const AddUser = () => {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
+  const { hasPermission } = usePermissions()
+  const canManage = hasPermission(PERMISSIONS.usersManage)
+
+  const { data: roles } = useQuery({
+    queryFn: async () => (await RolesService.readRoles()).data,
+    queryKey: ["roles"],
+    enabled: canManage,
+  })
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -66,10 +83,19 @@ const AddUser = () => {
       full_name: "",
       password: "",
       confirm_password: "",
-      is_superuser: false,
+      role_id: "",
       is_active: false,
     },
   })
+
+  // Default the role to "member" once the roles list is available, so every
+  // created user gets the baseline self-service level unless changed.
+  useEffect(() => {
+    if (!roles?.data.length) return
+    if (form.getValues("role_id")) return
+    const member = roles.data.find((role) => role.name === "member")
+    form.setValue("role_id", member?.id ?? roles.data[0].id)
+  }, [roles, form])
 
   const mutation = useMutation({
     mutationFn: (data: UserCreate) => UsersService.createUser({ body: data }),
@@ -85,7 +111,11 @@ const AddUser = () => {
   })
 
   const onSubmit = (data: FormData) => {
-    mutation.mutate(data)
+    const { role_id, confirm_password: _confirm, ...rest } = data
+    mutation.mutate({
+      ...rest,
+      role_ids: role_id ? [role_id] : undefined,
+    })
   }
 
   return (
@@ -184,21 +214,39 @@ const AddUser = () => {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="is_superuser"
-                render={({ field }) => (
-                  <FormItem className="flex items-center gap-3 space-y-0">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <FormLabel className="font-normal">Is superuser?</FormLabel>
-                  </FormItem>
-                )}
-              />
+              {canManage && (
+                <FormField
+                  control={form.control}
+                  name="role_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select a role" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {roles?.data.map((role) => (
+                            <SelectItem
+                              key={role.id}
+                              value={role.id}
+                              className="capitalize"
+                            >
+                              {role.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <FormField
                 control={form.control}

@@ -123,6 +123,26 @@ export type Message = {
 };
 
 /**
+ * MetricsPublic
+ */
+export type MetricsPublic = {
+    /**
+     * Total Users
+     */
+    total_users: number;
+    /**
+     * Active Users
+     */
+    active_users: number;
+    /**
+     * Users Per Role
+     */
+    users_per_role: {
+        [key: string]: number;
+    };
+};
+
+/**
  * NewPassword
  */
 export type NewPassword = {
@@ -156,6 +176,42 @@ export type PrivateUserCreate = {
      * Is Verified
      */
     is_verified?: boolean;
+};
+
+/**
+ * RolePublic
+ */
+export type RolePublic = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Permissions
+     */
+    permissions?: Array<string>;
+};
+
+/**
+ * RolesPublic
+ */
+export type RolesPublic = {
+    /**
+     * Data
+     */
+    data: Array<RolePublic>;
+    /**
+     * Count
+     */
+    count: number;
 };
 
 /**
@@ -199,10 +255,6 @@ export type UserCreate = {
      */
     is_active?: boolean;
     /**
-     * Is Superuser
-     */
-    is_superuser?: boolean;
-    /**
      * Full Name
      */
     full_name?: string | null;
@@ -210,6 +262,14 @@ export type UserCreate = {
      * Password
      */
     password: string;
+    /**
+     * Is Superuser
+     */
+    is_superuser?: boolean;
+    /**
+     * Role Ids
+     */
+    role_ids?: Array<string> | null;
 };
 
 /**
@@ -225,10 +285,6 @@ export type UserPublic = {
      */
     is_active?: boolean;
     /**
-     * Is Superuser
-     */
-    is_superuser?: boolean;
-    /**
      * Full Name
      */
     full_name?: string | null;
@@ -240,6 +296,18 @@ export type UserPublic = {
      * Created At
      */
     created_at?: string | null;
+    /**
+     * Is Superuser
+     */
+    is_superuser?: boolean;
+    /**
+     * Roles
+     */
+    roles?: Array<string>;
+    /**
+     * Permissions
+     */
+    permissions?: Array<string>;
 };
 
 /**
@@ -284,6 +352,10 @@ export type UserUpdate = {
      * Password
      */
     password?: string | null;
+    /**
+     * Role Ids
+     */
+    role_ids?: Array<string> | null;
 };
 
 /**
@@ -723,6 +795,38 @@ export type usersUpdateUserResponses = {
 };
 
 export type usersUpdateUserResponse = usersUpdateUserResponses[keyof usersUpdateUserResponses];
+
+export type rolesReadRolesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/roles/';
+};
+
+export type rolesReadRolesResponses = {
+    /**
+     * Successful Response
+     */
+    200: RolesPublic;
+};
+
+export type rolesReadRolesResponse = rolesReadRolesResponses[keyof rolesReadRolesResponses];
+
+export type metricsReadMetricsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/metrics/';
+};
+
+export type metricsReadMetricsResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetricsPublic;
+};
+
+export type metricsReadMetricsResponse = metricsReadMetricsResponses[keyof metricsReadMetricsResponses];
 
 export type utilsTestEmailData = {
     body?: never;

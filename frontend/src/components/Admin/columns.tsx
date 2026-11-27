@@ -40,13 +40,27 @@ export const columns: ColumnDef<DataTableFeatures, UserTableData>[] = [
     ),
   },
   {
-    accessorKey: "is_superuser",
-    header: "Role",
-    cell: ({ row }) => (
-      <Badge variant={row.original.is_superuser ? "default" : "secondary"}>
-        {row.original.is_superuser ? "Superuser" : "User"}
-      </Badge>
-    ),
+    accessorKey: "roles",
+    header: "Roles",
+    cell: ({ row }) => {
+      const roles = row.original.roles ?? []
+      if (roles.length === 0) {
+        return <span className="text-muted-foreground text-sm">None</span>
+      }
+      return (
+        <div className="flex flex-wrap gap-1">
+          {roles.map((role) => (
+            <Badge
+              key={role}
+              variant={role === "admin" ? "default" : "secondary"}
+              className="capitalize"
+            >
+              {role}
+            </Badge>
+          ))}
+        </div>
+      )
+    },
   },
   {
     accessorKey: "is_active",
